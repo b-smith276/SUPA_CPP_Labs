@@ -63,12 +63,8 @@ int main()
             print("bye!");
 			return 0;
 			break;
-		default:
-			std::cout << "Please input an integer between 1 and 5" << std::endl;
 		}
     }
 }
-
-//g++ -std=c++20 -w AnalyseData.cxx CustomFunctions.cxx -o AnalyseData
 
     
