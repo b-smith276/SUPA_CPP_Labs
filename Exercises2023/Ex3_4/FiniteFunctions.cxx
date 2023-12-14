@@ -3,10 +3,14 @@
 #include <vector>
 #include "FiniteFunctions.h"
 #include <filesystem> //To check extensions in a nice way
+#include <random>
+#include <algorithm>
 
 #include "gnuplot-iostream.h" //Needed to produce plots (not part of the course) 
 
 using std::filesystem::path;
+
+const double pi = 3.14159265358979323846;
 
 //Empty constructor
 FiniteFunction::FiniteFunction(){
@@ -56,14 +60,58 @@ double FiniteFunction::rangeMax() {return m_RMax;};
 double FiniteFunction::invxsquared(double x) {return 1/(1+x*x);};
 double FiniteFunction::callFunction(double x) {return this->invxsquared(x);}; //(overridable)
 
+void FiniteFunction::SampleFromFunction(const int& n_samples, std::vector<double>& random_samples_vector){
+
+  std::random_device rd; //Initialising true random number to seed pseudo random number generator
+
+  std::mt19937 gen(rd()); //Mersenne Twister 19937 pseudo random number generator seeded with random device
+
+  std::uniform_real_distribution<double> uniform_function(m_RMin, m_RMax); //Uniform dist in given range to be sampled from
+  double rand_xi = uniform_function(gen); //Drawing intial starting point from this dist
+
+  //Initialising uniform dist between 0 and 1 for random sampling of probabilities
+  std::uniform_real_distribution<double> uniform_p_function(0.0,1.0);
+
+  //Loop to sample using metropolis algorithm
+  for (int i = 0; i<n_samples; i++){
+    std::normal_distribution<double> normal_dist_for_sampling(rand_xi, 1.0); //Function needs to be initialised in loop as rand_xi changes
+    double rand_yi = normal_dist_for_sampling(gen); //Drawing a random y using a from a normal dist centered on rand_xi
+
+    //Ensuring point is within limits of function that we want to sample
+    while (rand_yi<m_RMin || rand_yi>m_RMax){
+      rand_yi = normal_dist_for_sampling(gen);
+    }
+
+    //Calculating A and T variables of algorithm
+    double A = std::min((this->callFunction(rand_yi))/(this->callFunction(rand_xi)), 1.0);
+    double T = uniform_p_function(gen);
+
+    //Accept value if P of jump is larger than random probability T 
+    //Means we will always get acceptance if P of value we have jumped to is larger than p of current value)
+    //Will sometimes get acceptance if P of value we have jumped to is smaller than P of current value as T is sampled randomly 
+    if (T<A) {
+        random_samples_vector.push_back(rand_yi);
+        rand_xi = rand_yi;
+    }
+  }
+}
 /*
 ###################
 Integration by hand (output needed to normalise function when plotting)
 ###################
 */ 
 double FiniteFunction::integrate(int Ndiv){ //private
-  //ToDo write an integrator
-  return -99;  
+  double integral;
+  double division_size = ((m_RMax-m_RMin)/Ndiv);
+  double bin_midpoint = m_RMin;
+
+  //Calculating integral by multiplying the bin width by the function value at the midpoint
+  for (int div =0; div<Ndiv; div++){
+    integral += division_size*(this->callFunction(bin_midpoint));
+    bin_midpoint += division_size;
+  }
+
+  return integral;  
 }
 double FiniteFunction::integral(int Ndiv) { //public
   if (Ndiv <= 0){
@@ -234,4 +282,149 @@ void FiniteFunction::generatePlot(Gnuplot &gp){
     gp << "plot '-' with points ps 2 lc rgb 'blue' title 'sampled data'\n";
     gp.send1d(m_samples);
   }
+}
+
+/*
+  #######################################################################################################
+  ## Functions for my added classes: NormalDistribution, CauchyLorentz, negativeCrystalBall
+  #######################################################################################################
+ */
+
+//Gaussian (normal)
+
+//Default constructor
+NormalDistribution::NormalDistribution(){
+  m_RMin = -5.0;
+  m_RMax = 5.0;
+  mean = 0;
+  standard_deviation = 0 ;
+  this->checkPath("GaussianFunction");
+  m_Integral = NULL;
+}
+
+//Parameterised constructor
+NormalDistribution::NormalDistribution(double range_min, double range_max, double mean_entry, double standard_deviation_entry, std::string outfile){
+  m_RMin = range_min;
+  m_RMax = range_max;
+  m_Integral = NULL;
+  mean = mean_entry;
+  standard_deviation = standard_deviation_entry;
+  this->checkPath(outfile); //Use provided string to name output files
+}
+
+//Gaussian formula
+double NormalDistribution::normal_dist_formula(double x){
+  return (1.0/(standard_deviation*std::sqrt(2.0*pi))*std::exp(-0.5*std::pow((x-mean)/standard_deviation,2)));
+}
+double NormalDistribution::callFunction(double x) {return this->normal_dist_formula(x);}
+
+//Printing info with mean and stddev also
+void NormalDistribution::printInfo(){
+  std::cout << "rangeMin: " << m_RMin << std::endl;
+  std::cout << "rangeMax: " << m_RMax << std::endl;
+  std::cout << "mean:" << mean << std::endl;
+  std::cout << "standard deviation:" << standard_deviation << std::endl;
+  std::cout << "integral: " << m_Integral << ", calculated using " << m_IntDiv << " divisions" << std::endl;
+  std::cout << "function: " << m_FunctionName << std::endl;
+}
+
+//Cauchy-Lorentz
+
+//Default constructor
+Lorentz::Lorentz(){
+  m_RMin = -5.0;
+  m_RMax = 5.0;
+  x_0 = 0;
+  gamma = 0;
+  this->checkPath("LorentzFunction");
+  m_Integral = NULL;
+}
+
+//Parameterised constructor
+Lorentz::Lorentz(double range_min, double range_max, double x_0_entry, double gamma_entry, std::string outfile){
+  m_RMin = range_min;
+  m_RMax = range_max;
+  m_Integral = NULL;
+  x_0 = x_0_entry;
+  gamma = gamma_entry;
+  this->checkPath(outfile); //Use provided string to name output files
+}
+
+//Cauchy-Lorentz formula
+double Lorentz::lorentz_formula(double x){
+  return (1.0/(pi*gamma*(1+pow((x-x_0)/gamma,2))));
+}
+
+double Lorentz::callFunction(double x) {return this->lorentz_formula(x);}
+
+//Printing info with mean and gamma(FWHM) also
+void Lorentz::printInfo(){
+  std::cout << "rangeMin: " << m_RMin << std::endl;
+  std::cout << "rangeMax: " << m_RMax << std::endl;
+  std::cout << "x_0:" << x_0 << std::endl;
+  std::cout << "gamma:" << gamma << std::endl;
+  std::cout << "integral: " << m_Integral << ", calculated using " << m_IntDiv << " divisions" << std::endl;
+  std::cout << "function: " << m_FunctionName << std::endl;
+}
+
+//Negative Crystall Ball
+
+//Default constructor
+NegativeCrystalBall::NegativeCrystalBall(){
+  m_RMin = -5.0;
+  m_RMax = 5.0;
+  mean = 0;
+  standard_deviation = 0;
+  n = 0;
+  alpha = 0;
+  
+  this->checkPath("NegativeCrystallBallFunction");
+  m_Integral = NULL;
+}
+
+//Parameterised constructor
+NegativeCrystalBall::NegativeCrystalBall(double range_min, double range_max, double mean_entry, double standard_deviation_entry, double n_entry, double alpha_entry,  std::string outfile){
+  m_RMin = range_min;
+  m_RMax = range_max;
+  m_Integral = NULL;
+  mean = mean_entry;
+  standard_deviation = standard_deviation_entry;
+  n = n_entry;
+  alpha = alpha_entry;
+  this->checkPath(outfile); //Use provided string to name output files
+}
+
+//Negative Crystal Ball formula
+double NegativeCrystalBall::negative_crystall_ball_formula(double x){
+  
+  //Calculating all necessary params to define this function
+  double quantity = (x - mean)/standard_deviation; //Defining quantity for form of function
+  double A = std::pow(n/std::abs(alpha),n)*std::exp(-std::pow(std::abs(alpha),2.0)/2.0);
+  double B = (n/std::abs(alpha))-std::abs(alpha);
+  double C = (n/std::abs(alpha))*(1.0/(n-1.0))*std::exp(-std::pow(std::abs(alpha),2.0)/2.0);
+  double D = std::sqrt(pi/2.0)*(1+std::erf(std::abs(alpha)/std::sqrt(2.0)));
+  double N = 1/(standard_deviation*(C+D));
+
+  //Function has 2 forms depending on value of alpha relative to (x - mean)/(standard deviation)
+  if (quantity > -1.0*alpha){
+    return N*std::exp(-0.5*std::pow((x-mean)/standard_deviation,2.0));
+  }
+
+  if (quantity <= -1.0*alpha){
+    return N*A*std::pow((B-quantity), -1.0*n);
+  }
+}
+
+double NegativeCrystalBall::callFunction(double x) {return this->negative_crystall_ball_formula(x);}
+
+//Printing info with mean, stddev, alpha and n also
+void NegativeCrystalBall::printInfo(){
+  std::cout << "rangeMin: " << m_RMin << std::endl;
+  std::cout << "rangeMax: " << m_RMax << std::endl;
+  std::cout << "mean:" << mean << std::endl;
+  std::cout << "standard deviation:" << standard_deviation << std::endl;
+  std::cout << "alpha:" << mean << std::endl;
+  std::cout << "n:" << standard_deviation << std::endl;
+  std::cout << "integral: " << m_Integral << ", calculated using " << m_IntDiv << " divisions" << std::endl;
+  std::cout << "function: " << m_FunctionName << std::endl;
 }

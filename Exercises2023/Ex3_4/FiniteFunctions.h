@@ -4,12 +4,13 @@
 
 #pragma once //Replacement for IFNDEF
 
-class FiniteFunction{
+class FiniteFunction
+{
 
 public:
   FiniteFunction(); //Empty constructor
   FiniteFunction(double range_min, double range_max, std::string outfile); //Variable constructor
-  ~FiniteFunction(); //Destructor
+ ~FiniteFunction(); //Destructor
   double rangeMin(); //Low end of the range the function is defined within
   double rangeMax(); //High end of the range the function is defined within
   double integral(int Ndiv = 1000); 
@@ -23,6 +24,8 @@ public:
   void plotData(std::vector<double> &points, int NBins, bool isdata=true); //NB! use isdata flag to pick between data and sampled distributions
   virtual void printInfo(); //Dump parameter info about the current function (Overridable)
   virtual double callFunction(double x); //Call the function with value x (Overridable)
+
+  void SampleFromFunction(const int& n_samples, std::vector<double>& random_samples_vector);
 
   //Protected members can be accessed by child classes but not users
 protected:
@@ -42,8 +45,67 @@ protected:
   double integrate(int Ndiv);
   std::vector< std::pair<double, double> > makeHist(std::vector<double> &points, int Nbins); //Helper function to turn data points into histogram with Nbins
   void checkPath(std::string outstring); //Helper function to ensure data and png paths are correct
-  void generatePlot(Gnuplot &gp); 
+  void generatePlot(Gnuplot &gp);
   
 private:
   double invxsquared(double x); //The default functional form
+};
+
+/*
+  #######################################################################################################
+  ## My added classes: NormalDistribution, Lorentz, NegativeCrystalBall
+  #######################################################################################################
+ */
+
+class NormalDistribution : public FiniteFunction 
+{
+  protected:
+  double mean;
+  double standard_deviation;
+
+  public:
+    NormalDistribution();
+    NormalDistribution(double range_min, double range_max, double mean_entry, double standard_deviation_entry, std::string outfile);
+
+    double normal_dist_formula(double x); //New Function to evaluate the Gaussian function at a given x
+    void ChangeMean(double& mean_entry);
+    //Overridden functions from the base class
+    void printInfo();
+    double callFunction(double x);
+};
+
+class Lorentz : public FiniteFunction 
+{
+  protected:
+  double x_0; //Location of the peak
+  double gamma; //FWHM for distribution
+
+  public:
+    Lorentz();
+    Lorentz(double range_min, double range_max, double x_0_entry, double gamma_entry, std::string outfile);
+
+    double lorentz_formula(double x); //New Function to evaluate the Lorentz function at a given x
+
+    //Overridden functions from the base class
+    void printInfo();
+    double callFunction(double x);
+};
+
+class NegativeCrystalBall : public FiniteFunction 
+{
+  protected:
+  double mean;
+  double standard_deviation;
+  double n;
+  double alpha;
+
+  public:
+    NegativeCrystalBall();
+    NegativeCrystalBall(double range_min, double range_max, double mean_entry, double standard_deviation_entry, double n_entry, double alpha_entry, std::string outfile);
+
+    double negative_crystall_ball_formula(double x); //New Function to evaluate the Gaussian function at a given x
+
+    //Overridden functions from the base class
+    void printInfo();
+    double callFunction(double x);
 };
